@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "build:static": "vite build"
+    "build:static": "STATIC_BUILD=true vite build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
