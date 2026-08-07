@@ -13,6 +13,9 @@ const basePath = process.env["BASE_PATH"] ?? "/";
 const isStaticBuild = process.env["STATIC_BUILD"] === "true";
 
 export default defineConfig({
+  // The static export needs Start's plain server build (dist/server/server.js) for
+  // the prerender pass; nitro's worker bundle is irrelevant for GitHub Pages.
+  ...(isStaticBuild ? { nitro: false as const } : {}),
   vite: {
     base: basePath,
   },
