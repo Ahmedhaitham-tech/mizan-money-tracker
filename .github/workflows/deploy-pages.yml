@@ -5,13 +5,11 @@ on:
     branches: [main]
   workflow_dispatch:
 
-# Allow the workflow to publish to Pages via the official deploy action.
 permissions:
   contents: read
   pages: write
   id-token: write
 
-# Never run two Pages deploys at once; queue instead of cancelling a live deploy.
 concurrency:
   group: pages
   cancel-in-progress: false
@@ -26,9 +24,14 @@ jobs:
         with:
           node-version: 22
 
-      # Keep package-lock.json in sync with package.json, then install.
-      # `npm ci` is used when the lockfile already matches; otherwise it is
-      # regenerated so the build never fails on a stale lock.
+      # Enables Pages for THIS repository and exposes its base_path / origin.
+      # No repository name, owner, or URL is hardcoded anywhere.
+      - name: Configure Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
       - name: Install dependencies
         run: |
           if [ -f package-lock.json ]; then
@@ -37,30 +40,18 @@ jobs:
             npm install
           fi
 
-      - name: Resolve Pages base path
-        id: base
-        run: |
-          REPO="${GITHUB_REPOSITORY#*/}"
-          OWNER="${GITHUB_REPOSITORY%/*}"
-          # User/org sites (<owner>.github.io) are served from the domain root.
-          if [ "$REPO" = "${OWNER,,}.github.io" ] || [ "$REPO" = "$OWNER.github.io" ]; then
-            echo "path=/" >> "$GITHUB_OUTPUT"
-          else
-            echo "path=/$REPO/" >> "$GITHUB_OUTPUT"
-          fi
-
       - name: Build static site
         env:
           STATIC_BUILD: "true"
-          BASE_PATH: ${{ steps.base.outputs.path }}
+          # base_path is "" for <owner>.github.io repos and "/<repo>" otherwise.
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}/
         run: npm run build:static
 
       - name: Prepare Pages artifact
         run: |
           # Bypass Jekyll so files/folders starting with "_" are served.
           touch dist/client/.nojekyll
-          # SPA fallback: unknown deep links load the client shell and are then
-          # resolved by the router.
+          # SPA fallback so deep links and refreshes resolve via the router.
           if [ -f dist/client/_shell.html ]; then
             cp dist/client/_shell.html dist/client/404.html
           else
@@ -81,3 +72,6 @@ jobs:
     steps:
       - id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Show live URL
+        run: echo "Deployed to ${{ steps.deployment.outputs.page_url }}" >> "$GITHUB_STEP_SUMMARY"
