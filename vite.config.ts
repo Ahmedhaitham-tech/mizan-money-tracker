@@ -9,7 +9,8 @@ import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 // GitHub Pages project sites are served from https://<user>.github.io/<repo>/, so the
 // bundle must be built with that sub-path as its base. The Pages workflow sets
 // BASE_PATH=/<repo>/ automatically; locally and on Lovable hosting it stays "/".
-const basePath = process.env["BASE_PATH"] ?? "/";
+const requestedBasePath = process.env["BASE_PATH"] ?? "/";
+const basePath = `/${requestedBasePath.replace(/^\/+|\/+$/g, "")}${requestedBasePath === "/" ? "" : "/"}`;
 const isStaticBuild = process.env["STATIC_BUILD"] === "true";
 
 export default defineConfig({
