@@ -64,7 +64,8 @@ jobs:
           };
           walk(root);
 
-          const rootAsset = /(?:href|src)=["']\/(?!\/|mizan-money-tracker\/|__l5e\/)/;
+          const escapedBase = expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const rootAsset = new RegExp(`(?:href|src)=["']\\/(?!\\/|${escapedBase.slice(1)}|__l5e\\/)`);
           for (const file of files) {
             const content = readFileSync(file, "utf8");
             if (rootAsset.test(content)) {
