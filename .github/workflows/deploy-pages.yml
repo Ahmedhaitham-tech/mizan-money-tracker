@@ -33,12 +33,7 @@ jobs:
           enablement: true
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci || { echo "Lockfile out of sync — regenerating"; rm -f package-lock.json; npm install; }
-          else
-            npm install
-          fi
+        run: npm ci
 
       - name: Build static site
         env:
@@ -46,6 +41,44 @@ jobs:
           # base_path is "" for <owner>.github.io repos and "/<repo>" otherwise.
           BASE_PATH: ${{ steps.pages.outputs.base_path }}/
         run: npm run build:static
+
+      - name: Verify Pages base path
+        env:
+          PAGES_BASE_PATH: ${{ steps.pages.outputs.base_path }}/
+        run: |
+          node --input-type=module <<'EOF'
+          import { readFileSync, readdirSync, statSync } from "node:fs";
+          import { join } from "node:path";
+
+          const root = "dist/client";
+          const expected = process.env.PAGES_BASE_PATH;
+          if (!expected) throw new Error("GitHub Pages did not provide a base path");
+
+          const files = [];
+          const walk = (directory) => {
+            for (const entry of readdirSync(directory)) {
+              const path = join(directory, entry);
+              if (statSync(path).isDirectory()) walk(path);
+              else if (/\.(?:html|css|js|json|xml|txt)$/.test(path)) files.push(path);
+            }
+          };
+          walk(root);
+
+          const escapedBase = expected.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+          const rootAsset = new RegExp(`(?:href|src)=["']\\/(?!\\/|${escapedBase.slice(1)}|__l5e\\/)`);
+          for (const file of files) {
+            const content = readFileSync(file, "utf8");
+            if (rootAsset.test(content)) {
+              throw new Error(`Root-relative deployment URL found in ${file}`);
+            }
+          }
+
+          const html = readFileSync(join(root, "index.html"), "utf8");
+          if (!html.includes(expected)) {
+            throw new Error(`Generated HTML does not reference Pages base path ${expected}`);
+          }
+          console.log(`Verified static artifact for ${expected}`);
+          EOF
 
       - name: Prepare Pages artifact
         run: |
