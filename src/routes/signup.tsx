@@ -2,6 +2,9 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
+import { lovable } from "@/integrations/lovable/index";
+import { supabase } from "@/integrations/supabase/client";
+import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -29,24 +32,28 @@ function SignUp() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pending, setPending] = useState<"signup" | "google" | null>(null);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
 
     setError("");
     setSuccess("");
 
     const formData = new FormData(event.currentTarget);
-
     const name = String(formData.get("name") || "").trim();
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
-    const confirmPassword = String(
-      formData.get("confirmPassword") || "",
-    );
+    const confirmPassword = String(formData.get("confirmPassword") || "");
 
     if (!name || !email || !password || !confirmPassword) {
       setError("Please fill in all fields.");
+      return;
+    }
+
+    if (!EMAIL_PATTERN.test(email)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
@@ -60,20 +67,64 @@ function SignUp() {
       return;
     }
 
-    setSuccess("Account details are valid. Redirecting to sign in...");
+    setPending("signup");
 
-    setTimeout(() => {
-      navigate({ to: "/signin" });
-    }, 1000);
+    try {
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          emailRedirectTo: absoluteUrl("signin"),
+          data: { full_name: name },
+        },
+      });
+
+      if (signUpError) {
+        setError(authErrorMessage(signUpError));
+        return;
+      }
+
+      if (data.session) {
+        setSuccess("Account created. Redirecting to your dashboard...");
+        navigate({ to: "/dashboard" });
+        return;
+      }
+
+      setSuccess(
+        `Account created for ${email}. Check your inbox and click the verification link, then sign in.`,
+      );
+      event.currentTarget.reset();
+    } catch (unknownError) {
+      setError(authErrorMessage(unknownError));
+    } finally {
+      setPending(null);
+    }
   }
 
-  function handleGoogleSignup() {
+  async function handleGoogleSignup() {
+    if (pending) return;
     setError("");
     setSuccess("");
+    setPending("google");
 
-    setError(
-      "Google sign-up is not connected yet. Connect an authentication provider to enable it.",
-    );
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: absoluteUrl(),
+      });
+
+      if (result.error) {
+        setError(authErrorMessage(result.error));
+        return;
+      }
+
+      if (result.redirected) return;
+
+      navigate({ to: "/dashboard" });
+    } catch (unknownError) {
+      setError(authErrorMessage(unknownError));
+    } finally {
+      setPending(null);
+    }
   }
 
   return (
@@ -83,10 +134,7 @@ function SignUp() {
       footer={
         <>
           Already have an account?{" "}
-          <Link
-            to="/signin"
-            className="font-semibold text-primary hover:underline"
-          >
+          <Link to="/signin" className="font-semibold text-primary hover:underline">
             Sign in
           </Link>
         </>
@@ -95,19 +143,9 @@ function SignUp() {
       <form className="space-y-4" onSubmit={handleSubmit}>
         <Field label="Full name" name="name" autoComplete="name" />
 
-        <Field
-          label="Email"
-          name="email"
-          type="email"
-          autoComplete="email"
-        />
+        <Field label="Email" name="email" type="email" autoComplete="email" />
 
-        <Field
-          label="Password"
-          name="password"
-          type="password"
-          autoComplete="new-password"
-        />
+        <Field label="Password" name="password" type="password" autoComplete="new-password" />
 
         <Field
           label="Confirm password"
@@ -128,12 +166,14 @@ function SignUp() {
           </p>
         )}
 
-        <SubmitButton>Create account</SubmitButton>
+        <SubmitButton disabled={pending !== null}>
+          {pending === "signup" ? "Creating account..." : "Create account"}
+        </SubmitButton>
       </form>
 
-      <div onClick={handleGoogleSignup}>
-        <GoogleButton>Sign up with Google</GoogleButton>
-      </div>
+      <GoogleButton onClick={handleGoogleSignup} disabled={pending !== null}>
+        {pending === "google" ? "Connecting to Google..." : "Sign up with Google"}
+      </GoogleButton>
 
       <p className="mt-5 text-center text-xs text-muted-foreground">
         Mizan never asks for card numbers, CVV, PINs or banking passwords.
