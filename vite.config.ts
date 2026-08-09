@@ -31,7 +31,13 @@ export default defineConfig({
       ? {
           spa: { enabled: true },
           prerender: { enabled: true, crawlLinks: true },
-          pages: [{ path: "/" }, { path: "/signin" }, { path: "/signup" }],
+          pages: [
+            { path: "/" },
+            { path: "/signin" },
+            { path: "/signup" },
+            { path: "/reset-password" },
+            { path: "/dashboard" },
+          ],
         }
       : {}),
   },
