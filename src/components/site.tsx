@@ -108,18 +108,33 @@ export function Field({
   );
 }
 
-export function SubmitButton({ children }: { children: ReactNode }) {
+export function SubmitButton({
+  children,
+  disabled,
+}: {
+  children: ReactNode;
+  disabled?: boolean;
+}) {
   return (
     <button
       type="submit"
-      className="h-11 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+      disabled={disabled}
+      className="h-11 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
     >
       {children}
     </button>
   );
 }
 
-export function GoogleButton({ children }: { children: ReactNode }) {
+export function GoogleButton({
+  children,
+  onClick,
+  disabled,
+}: {
+  children: ReactNode;
+  onClick?: () => void;
+  disabled?: boolean;
+}) {
   return (
     <>
       <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
@@ -129,7 +144,9 @@ export function GoogleButton({ children }: { children: ReactNode }) {
       </div>
       <button
         type="button"
-        className="h-11 w-full rounded-lg border border-input bg-secondary text-sm font-medium text-secondary-foreground transition-colors hover:bg-muted"
+        onClick={onClick}
+        disabled={disabled}
+        className="h-11 w-full rounded-lg border border-input bg-secondary text-sm font-medium text-secondary-foreground transition-colors hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
       >
         {children}
       </button>
