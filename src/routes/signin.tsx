@@ -1,12 +1,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import {
-  AuthShell,
-  Field,
-  SubmitButton,
-  GoogleButton,
-} from "@/components/site";
+import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
+import { lovable } from "@/integrations/lovable/index";
+import { supabase } from "@/integrations/supabase/client";
+import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({
@@ -14,8 +12,7 @@ export const Route = createFileRoute("/signin")({
       { title: "Sign in — Mizan" },
       {
         name: "description",
-        content:
-          "Sign in to your Mizan account to continue to your dashboard.",
+        content: "Sign in to your Mizan account to continue to your dashboard.",
       },
       { property: "og:title", content: "Sign in — Mizan" },
       {
@@ -34,15 +31,16 @@ function SignIn() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [pending, setPending] = useState<"password" | "google" | "reset" | null>(null);
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (pending) return;
 
     setError("");
     setSuccess("");
 
     const formData = new FormData(event.currentTarget);
-
     const email = String(formData.get("email") || "").trim();
     const password = String(formData.get("password") || "");
 
@@ -51,25 +49,96 @@ function SignIn() {
       return;
     }
 
-    if (password.length < 8) {
-      setError("Your password must be at least 8 characters.");
+    if (!EMAIL_PATTERN.test(email)) {
+      setError("Please enter a valid email address.");
       return;
     }
 
-    setSuccess("Sign in details are valid. Redirecting...");
+    setPending("password");
 
-    setTimeout(() => {
-      navigate({ to: "/" });
-    }, 1000);
+    try {
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (signInError) {
+        setError(authErrorMessage(signInError));
+        return;
+      }
+
+      if (!data.session) {
+        setError("We couldn't start your session. Please try again.");
+        return;
+      }
+
+      setSuccess("Signed in. Redirecting to your dashboard...");
+      navigate({ to: "/dashboard" });
+    } catch (unknownError) {
+      setError(authErrorMessage(unknownError));
+    } finally {
+      setPending(null);
+    }
   }
 
-  function handleGoogleSignin() {
+  async function handleGoogleSignin() {
+    if (pending) return;
+    setError("");
+    setSuccess("");
+    setPending("google");
+
+    try {
+      const result = await lovable.auth.signInWithOAuth("google", {
+        redirect_uri: absoluteUrl(),
+      });
+
+      if (result.error) {
+        setError(authErrorMessage(result.error));
+        return;
+      }
+
+      if (result.redirected) return;
+
+      navigate({ to: "/dashboard" });
+    } catch (unknownError) {
+      setError(authErrorMessage(unknownError));
+    } finally {
+      setPending(null);
+    }
+  }
+
+  async function handleForgotPassword() {
+    if (pending) return;
     setError("");
     setSuccess("");
 
-    setError(
-      "Google sign-in is not connected yet. Connect an authentication provider to enable it.",
-    );
+    const email = String(
+      (document.getElementById("email") as HTMLInputElement | null)?.value || "",
+    ).trim();
+
+    if (!email || !EMAIL_PATTERN.test(email)) {
+      setError("Enter your email address above, then select “Forgot password?” again.");
+      return;
+    }
+
+    setPending("reset");
+
+    try {
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: absoluteUrl("reset-password"),
+      });
+
+      if (resetError) {
+        setError(authErrorMessage(resetError));
+        return;
+      }
+
+      setSuccess(`We've sent a password reset link to ${email}. Check your inbox.`);
+    } catch (unknownError) {
+      setError(authErrorMessage(unknownError));
+    } finally {
+      setPending(null);
+    }
   }
 
   return (
@@ -79,22 +148,14 @@ function SignIn() {
       footer={
         <>
           New to Mizan?{" "}
-          <Link
-            to="/signup"
-            className="font-semibold text-primary hover:underline"
-          >
+          <Link to="/signup" className="font-semibold text-primary hover:underline">
             Create an account
           </Link>
         </>
       }
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <Field
-          label="Email"
-          name="email"
-          type="email"
-          autoComplete="email"
-        />
+        <Field label="Email" name="email" type="email" autoComplete="email" />
 
         <Field
           label="Password"
@@ -104,12 +165,11 @@ function SignIn() {
           trailing={
             <button
               type="button"
-              onClick={() =>
-                setError("Password recovery is not connected yet.")
-              }
-              className="text-xs text-muted-foreground hover:text-foreground"
+              onClick={handleForgotPassword}
+              disabled={pending !== null}
+              className="text-xs text-muted-foreground hover:text-foreground disabled:opacity-60"
             >
-              Forgot password?
+              {pending === "reset" ? "Sending link..." : "Forgot password?"}
             </button>
           }
         />
@@ -126,12 +186,14 @@ function SignIn() {
           </p>
         )}
 
-        <SubmitButton>Sign in</SubmitButton>
+        <SubmitButton disabled={pending !== null}>
+          {pending === "password" ? "Signing in..." : "Sign in"}
+        </SubmitButton>
       </form>
 
-      <div onClick={handleGoogleSignin}>
-        <GoogleButton>Continue with Google</GoogleButton>
-      </div>
+      <GoogleButton onClick={handleGoogleSignin} disabled={pending !== null}>
+        {pending === "google" ? "Connecting to Google..." : "Continue with Google"}
+      </GoogleButton>
     </AuthShell>
   );
 }
