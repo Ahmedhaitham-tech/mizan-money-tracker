@@ -1,10 +1,19 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
+import {
+  AuthShell,
+  Field,
+  SubmitButton,
+  GoogleButton,
+} from "@/components/site";
 import { lovable } from "@/integrations/lovable/index";
 import { supabase } from "@/integrations/supabase/client";
-import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
+import {
+  EMAIL_PATTERN,
+  absoluteUrl,
+  authErrorMessage,
+} from "@/lib/auth-utils";
 
 export const Route = createFileRoute("/signup")({
   head: () => ({
@@ -15,13 +24,22 @@ export const Route = createFileRoute("/signup")({
         content:
           "Create a free Mizan account and start tracking your money privately in under a minute.",
       },
-      { property: "og:title", content: "Create your account — Mizan" },
+      {
+        property: "og:title",
+        content: "Create your account — Mizan",
+      },
       {
         property: "og:description",
         content: "Free, private money tracking with budgets, goals and analytics.",
       },
-      { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary_large_image" },
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        name: "twitter:card",
+        content: "summary_large_image",
+      },
     ],
   }),
   component: SignUp,
@@ -36,16 +54,26 @@ function SignUp() {
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
+
     if (pending) return;
+
+    // Store the actual form element BEFORE any async operation.
+    // React's currentTarget may no longer be available after await.
+    const form = event.currentTarget;
 
     setError("");
     setSuccess("");
 
-    const formData = new FormData(event.currentTarget);
+    const formData = new FormData(form);
+
     const name = String(formData.get("name") || "").trim();
-    const email = String(formData.get("email") || "").trim();
+    const email = String(formData.get("email") || "")
+      .trim()
+      .toLowerCase();
     const password = String(formData.get("password") || "");
-    const confirmPassword = String(formData.get("confirmPassword") || "");
+    const confirmPassword = String(
+      formData.get("confirmPassword") || "",
+    );
 
     if (!name || !email || !password || !confirmPassword) {
       setError("Please fill in all fields.");
@@ -70,30 +98,45 @@ function SignUp() {
     setPending("signup");
 
     try {
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          emailRedirectTo: absoluteUrl("signin"),
-          data: { full_name: name },
-        },
-      });
+      const { data, error: signUpError } =
+        await supabase.auth.signUp({
+          email,
+          password,
+          options: {
+            emailRedirectTo: absoluteUrl("signin"),
+            data: {
+              full_name: name,
+            },
+          },
+        });
 
       if (signUpError) {
         setError(authErrorMessage(signUpError));
         return;
       }
 
+      // If Supabase immediately created an authenticated session,
+      // send the user to the dashboard.
       if (data.session) {
-        setSuccess("Account created. Redirecting to your dashboard...");
-        navigate({ to: "/dashboard" });
+        setSuccess(
+          "Account created. Redirecting to your dashboard...",
+        );
+
+        navigate({
+          to: "/dashboard",
+        });
+
         return;
       }
 
+      // When email confirmation is enabled, Supabase normally
+      // returns a user without an active session.
       setSuccess(
         `Account created for ${email}. Check your inbox and click the verification link, then sign in.`,
       );
-      event.currentTarget.reset();
+
+      // Safe because "form" was captured before the async call.
+      form.reset();
     } catch (unknownError) {
       setError(authErrorMessage(unknownError));
     } finally {
@@ -103,6 +146,7 @@ function SignUp() {
 
   async function handleGoogleSignup() {
     if (pending) return;
+
     setError("");
     setSuccess("");
     setPending("google");
@@ -117,9 +161,12 @@ function SignUp() {
         return;
       }
 
+      // OAuth navigation is handled by the provider.
       if (result.redirected) return;
 
-      navigate({ to: "/dashboard" });
+      navigate({
+        to: "/dashboard",
+      });
     } catch (unknownError) {
       setError(authErrorMessage(unknownError));
     } finally {
@@ -134,18 +181,35 @@ function SignUp() {
       footer={
         <>
           Already have an account?{" "}
-          <Link to="/signin" className="font-semibold text-primary hover:underline">
+          <Link
+            to="/signin"
+            className="font-semibold text-primary hover:underline"
+          >
             Sign in
           </Link>
         </>
       }
     >
       <form className="space-y-4" onSubmit={handleSubmit}>
-        <Field label="Full name" name="name" autoComplete="name" />
+        <Field
+          label="Full name"
+          name="name"
+          autoComplete="name"
+        />
 
-        <Field label="Email" name="email" type="email" autoComplete="email" />
+        <Field
+          label="Email"
+          name="email"
+          type="email"
+          autoComplete="email"
+        />
 
-        <Field label="Password" name="password" type="password" autoComplete="new-password" />
+        <Field
+          label="Password"
+          name="password"
+          type="password"
+          autoComplete="new-password"
+        />
 
         <Field
           label="Confirm password"
@@ -167,12 +231,19 @@ function SignUp() {
         )}
 
         <SubmitButton disabled={pending !== null}>
-          {pending === "signup" ? "Creating account..." : "Create account"}
+          {pending === "signup"
+            ? "Creating account..."
+            : "Create account"}
         </SubmitButton>
       </form>
 
-      <GoogleButton onClick={handleGoogleSignup} disabled={pending !== null}>
-        {pending === "google" ? "Connecting to Google..." : "Sign up with Google"}
+      <GoogleButton
+        onClick={handleGoogleSignup}
+        disabled={pending !== null}
+      >
+        {pending === "google"
+          ? "Connecting to Google..."
+          : "Sign up with Google"}
       </GoogleButton>
 
       <p className="mt-5 text-center text-xs text-muted-foreground">
