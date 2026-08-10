@@ -2,7 +2,6 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
-import { lovable } from "@/integrations/lovable/index";
 import { supabase } from "@/integrations/supabase/client";
 import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
 
@@ -88,21 +87,19 @@ function SignIn() {
     setPending("google");
 
     try {
-      const result = await lovable.auth.signInWithOAuth("google", {
-        redirect_uri: absoluteUrl(),
+      const { error: googleError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: absoluteUrl("dashboard") },
       });
 
-      if (result.error) {
-        setError(authErrorMessage(result.error));
+      if (googleError) {
+        setError(authErrorMessage(googleError));
+        setPending(null);
         return;
       }
-
-      if (result.redirected) return;
-
-      navigate({ to: "/dashboard" });
+      // Supabase performs the browser redirect to Google.
     } catch (unknownError) {
       setError(authErrorMessage(unknownError));
-    } finally {
       setPending(null);
     }
   }
