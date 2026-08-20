@@ -179,6 +179,7 @@ function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
@@ -187,7 +188,7 @@ function Dashboard() {
     if (!user) return;
     setLoadError("");
 
-    const [tx, bg, gl, profile] = await Promise.all([
+    const [tx, bg, gl, ac, profile] = await Promise.all([
       supabase
         .from("transactions")
         .select("id, type, amount, category, note, occurred_on")
@@ -198,14 +199,21 @@ function Dashboard() {
         .from("goals")
         .select("id, name, target_amount, saved_amount, target_date")
         .order("created_at"),
+      supabase
+        .from("accounts")
+        .select("id, name, provider, account_type, currency, initial_balance, last_four, is_active")
+        .order("created_at"),
       supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
     ]);
 
-    const firstError = tx.error || bg.error || gl.error;
+    const firstError = tx.error || bg.error || gl.error || ac.error;
     if (firstError) setLoadError(errorMessage(firstError));
 
     setTransactions((tx.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })));
     setBudgets((bg.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })));
+    setAccounts(
+      (ac.data ?? []).map((row) => ({ ...row, initial_balance: Number(row.initial_balance) })),
+    );
     setGoals(
       (gl.data ?? []).map((row) => ({
         ...row,
@@ -213,6 +221,7 @@ function Dashboard() {
         saved_amount: Number(row.saved_amount),
       })),
     );
+
     setFullName(
       profile.data?.full_name ??
         (user.user_metadata?.["full_name"] as string | undefined) ??
