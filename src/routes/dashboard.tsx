@@ -56,6 +56,56 @@ type Goal = {
   target_date: string | null;
 };
 
+type Account = {
+  id: string;
+  name: string;
+  provider: string;
+  account_type: string;
+  currency: string;
+  initial_balance: number;
+  last_four: string | null;
+  is_active: boolean;
+};
+
+const ACCOUNT_TYPES = [
+  { value: "bank_account", label: "Bank Account" },
+  { value: "debit_card", label: "Debit Card" },
+  { value: "credit_card", label: "Credit Card" },
+  { value: "prepaid_card", label: "Prepaid Card" },
+  { value: "cash", label: "Cash" },
+  { value: "digital_wallet", label: "Digital Wallet" },
+  { value: "telda", label: "Telda" },
+  { value: "other", label: "Other" },
+] as const;
+
+const ACCOUNT_PROVIDERS = [
+  "Banque Misr",
+  "National Bank of Egypt",
+  "CIB",
+  "QNB Alahli",
+  "Banque du Caire",
+  "AlexBank",
+  "Telda",
+  "Other",
+] as const;
+
+const ACCOUNT_CURRENCIES = ["EGP", "USD", "EUR", "GBP", "SAR", "AED"] as const;
+
+const CARD_TYPES = new Set(["debit_card", "credit_card", "prepaid_card", "telda"]);
+
+function accountTypeLabel(value: string) {
+  return ACCOUNT_TYPES.find((option) => option.value === value)?.label ?? "Other";
+}
+
+function amountIn(currency: string, value: number) {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
