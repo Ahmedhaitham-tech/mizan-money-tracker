@@ -1,7 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
+import { AuthShell, Field, SubmitButton } from "@/components/site";
 import { supabase } from "@/integrations/supabase/client";
 import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
 
@@ -30,7 +30,7 @@ function SignIn() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [pending, setPending] = useState<"password" | "google" | "reset" | null>(null);
+  const [pending, setPending] = useState<"password" | "reset" | null>(null);
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -76,30 +76,6 @@ function SignIn() {
     } catch (unknownError) {
       setError(authErrorMessage(unknownError));
     } finally {
-      setPending(null);
-    }
-  }
-
-  async function handleGoogleSignin() {
-    if (pending) return;
-    setError("");
-    setSuccess("");
-    setPending("google");
-
-    try {
-      const { error: googleError } = await supabase.auth.signInWithOAuth({
-        provider: "google",
-        options: { redirectTo: absoluteUrl("dashboard") },
-      });
-
-      if (googleError) {
-        setError(authErrorMessage(googleError));
-        setPending(null);
-        return;
-      }
-      // Supabase performs the browser redirect to Google.
-    } catch (unknownError) {
-      setError(authErrorMessage(unknownError));
       setPending(null);
     }
   }
@@ -187,10 +163,6 @@ function SignIn() {
           {pending === "password" ? "Signing in..." : "Sign in"}
         </SubmitButton>
       </form>
-
-      <GoogleButton onClick={handleGoogleSignin} disabled={pending !== null}>
-        {pending === "google" ? "Connecting to Google..." : "Continue with Google"}
-      </GoogleButton>
     </AuthShell>
   );
 }
