@@ -56,6 +56,56 @@ type Goal = {
   target_date: string | null;
 };
 
+type Account = {
+  id: string;
+  name: string;
+  provider: string;
+  account_type: string;
+  currency: string;
+  initial_balance: number;
+  last_four: string | null;
+  is_active: boolean;
+};
+
+const ACCOUNT_TYPES = [
+  { value: "bank_account", label: "Bank Account" },
+  { value: "debit_card", label: "Debit Card" },
+  { value: "credit_card", label: "Credit Card" },
+  { value: "prepaid_card", label: "Prepaid Card" },
+  { value: "cash", label: "Cash" },
+  { value: "digital_wallet", label: "Digital Wallet" },
+  { value: "telda", label: "Telda" },
+  { value: "other", label: "Other" },
+] as const;
+
+const ACCOUNT_PROVIDERS = [
+  "Banque Misr",
+  "National Bank of Egypt",
+  "CIB",
+  "QNB Alahli",
+  "Banque du Caire",
+  "AlexBank",
+  "Telda",
+  "Other",
+] as const;
+
+const ACCOUNT_CURRENCIES = ["EGP", "USD", "EUR", "GBP", "SAR", "AED"] as const;
+
+const CARD_TYPES = new Set(["debit_card", "credit_card", "prepaid_card", "telda"]);
+
+function accountTypeLabel(value: string) {
+  return ACCOUNT_TYPES.find((option) => option.value === value)?.label ?? "Other";
+}
+
+function amountIn(currency: string, value: number) {
+  try {
+    return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(value);
+  } catch {
+    return `${currency} ${value.toFixed(2)}`;
+  }
+}
+
+
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -129,6 +179,7 @@ function Dashboard() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [goals, setGoals] = useState<Goal[]>([]);
+  const [accounts, setAccounts] = useState<Account[]>([]);
 
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
@@ -137,7 +188,7 @@ function Dashboard() {
     if (!user) return;
     setLoadError("");
 
-    const [tx, bg, gl, profile] = await Promise.all([
+    const [tx, bg, gl, ac, profile] = await Promise.all([
       supabase
         .from("transactions")
         .select("id, type, amount, category, note, occurred_on")
@@ -148,14 +199,21 @@ function Dashboard() {
         .from("goals")
         .select("id, name, target_amount, saved_amount, target_date")
         .order("created_at"),
+      supabase
+        .from("accounts")
+        .select("id, name, provider, account_type, currency, initial_balance, last_four, is_active")
+        .order("created_at"),
       supabase.from("profiles").select("full_name").eq("id", user.id).maybeSingle(),
     ]);
 
-    const firstError = tx.error || bg.error || gl.error;
+    const firstError = tx.error || bg.error || gl.error || ac.error;
     if (firstError) setLoadError(errorMessage(firstError));
 
     setTransactions((tx.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })));
     setBudgets((bg.data ?? []).map((row) => ({ ...row, amount: Number(row.amount) })));
+    setAccounts(
+      (ac.data ?? []).map((row) => ({ ...row, initial_balance: Number(row.initial_balance) })),
+    );
     setGoals(
       (gl.data ?? []).map((row) => ({
         ...row,
@@ -163,6 +221,7 @@ function Dashboard() {
         saved_amount: Number(row.saved_amount),
       })),
     );
+
     setFullName(
       profile.data?.full_name ??
         (user.user_metadata?.["full_name"] as string | undefined) ??
@@ -237,7 +296,9 @@ function Dashboard() {
         </div>
 
         <div className="mt-6 grid gap-6">
+          <AccountsPanel userId={user?.id ?? ""} loading={loading} rows={accounts} reload={load} />
           <TransactionsPanel
+
             userId={user?.id ?? ""}
             loading={loading}
             rows={visibleTransactions}
@@ -870,6 +931,286 @@ function GoalsPanel({
               </div>
             );
           })
+        )}
+      </div>
+    </Panel>
+  );
+}
+
+/* ------------------------------------ accounts ----------------------------------- */
+
+function AccountsPanel({
+  userId,
+  loading,
+  rows,
+  reload,
+}: {
+  userId: string;
+  loading: boolean;
+  rows: Account[];
+  reload: () => Promise<void>;
+}) {
+  const [editing, setEditing] = useState<Account | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [showArchived, setShowArchived] = useState(false);
+  const [type, setType] = useState<string>("bank_account");
+
+  useEffect(() => {
+    setType(editing?.account_type ?? "bank_account");
+  }, [editing]);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (pending) return;
+    const form = event.currentTarget;
+    const data = new FormData(form);
+
+    const name = String(data.get("name") || "").trim();
+    const provider = String(data.get("provider") || "Other");
+    const accountType = String(data.get("account_type") || "bank_account");
+    const currency = String(data.get("currency") || "EGP");
+    const rawBalance = String(data.get("initial_balance") || "").trim();
+    const lastFourRaw = String(data.get("last_four") || "").trim();
+
+    setError("");
+    setSuccess("");
+
+    if (!name) {
+      setError("Please give the account a name.");
+      return;
+    }
+    if (!ACCOUNT_TYPES.some((option) => option.value === accountType)) {
+      setError("Choose a valid account type.");
+      return;
+    }
+    if (!ACCOUNT_CURRENCIES.includes(currency as (typeof ACCOUNT_CURRENCIES)[number])) {
+      setError("Choose a valid currency.");
+      return;
+    }
+    if (!ACCOUNT_PROVIDERS.includes(provider as (typeof ACCOUNT_PROVIDERS)[number])) {
+      setError("Choose a valid provider.");
+      return;
+    }
+
+    const initialBalance = rawBalance === "" ? 0 : Number(rawBalance);
+    if (!Number.isFinite(initialBalance)) {
+      setError("Enter a valid starting balance.");
+      return;
+    }
+    if (lastFourRaw && !/^\d{4}$/.test(lastFourRaw)) {
+      setError("Last four digits must be exactly 4 numbers — never the full card number.");
+      return;
+    }
+
+    setPending("save");
+    const payload = {
+      name,
+      provider,
+      account_type: accountType,
+      currency,
+      initial_balance: initialBalance,
+      last_four: CARD_TYPES.has(accountType) && lastFourRaw ? lastFourRaw : null,
+    };
+
+    const { error: writeError } = editing
+      ? await supabase.from("accounts").update(payload).eq("id", editing.id)
+      : await supabase.from("accounts").insert({ ...payload, user_id: userId });
+
+    setPending(null);
+
+    if (writeError) {
+      setError(errorMessage(writeError));
+      return;
+    }
+
+    setSuccess(editing ? "Account updated." : "Account added.");
+    setEditing(null);
+    form.reset();
+    setType("bank_account");
+    await reload();
+  }
+
+  async function toggleArchive(row: Account) {
+    if (pending) return;
+    setError("");
+    setSuccess("");
+    setPending(`archive-${row.id}`);
+    const { error: writeError } = await supabase
+      .from("accounts")
+      .update({ is_active: !row.is_active })
+      .eq("id", row.id);
+    setPending(null);
+    if (writeError) {
+      setError(errorMessage(writeError));
+      return;
+    }
+    setSuccess(row.is_active ? "Account archived." : "Account restored.");
+    await reload();
+  }
+
+  const visible = rows.filter((row) => (showArchived ? true : row.is_active));
+
+  return (
+    <Panel
+      title="Accounts & cards"
+      description="Track the bank accounts, cards, cash and wallets you use. Mizan never asks for card numbers, PINs, CVVs or banking passwords."
+    >
+      <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" onSubmit={handleSubmit}>
+        <input
+          key={`name-${editing?.id ?? "new"}`}
+          name="name"
+          placeholder="Account name"
+          defaultValue={editing?.name ?? ""}
+          className={inputClass}
+          aria-label="Account name"
+        />
+        <select
+          key={`provider-${editing?.id ?? "new"}`}
+          name="provider"
+          defaultValue={editing?.provider ?? "Other"}
+          className={inputClass}
+          aria-label="Provider"
+        >
+          {ACCOUNT_PROVIDERS.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <select
+          key={`account_type-${editing?.id ?? "new"}`}
+          name="account_type"
+          value={type}
+          onChange={(event) => setType(event.target.value)}
+          className={inputClass}
+          aria-label="Account type"
+        >
+          {ACCOUNT_TYPES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+        <select
+          key={`currency-${editing?.id ?? "new"}`}
+          name="currency"
+          defaultValue={editing?.currency ?? "EGP"}
+          className={inputClass}
+          aria-label="Currency"
+        >
+          {ACCOUNT_CURRENCIES.map((option) => (
+            <option key={option} value={option}>
+              {option}
+            </option>
+          ))}
+        </select>
+        <input
+          key={`initial_balance-${editing?.id ?? "new"}`}
+          name="initial_balance"
+          type="number"
+          step="0.01"
+          placeholder="Starting balance"
+          defaultValue={editing?.initial_balance ?? ""}
+          className={inputClass}
+          aria-label="Starting balance"
+        />
+        {CARD_TYPES.has(type) ? (
+          <input
+            key={`last_four-${editing?.id ?? "new"}`}
+            name="last_four"
+            inputMode="numeric"
+            maxLength={4}
+            placeholder="Last 4 digits (optional)"
+            defaultValue={editing?.last_four ?? ""}
+            className={inputClass}
+            aria-label="Last four digits"
+          />
+        ) : (
+          <span className="hidden lg:block" />
+        )}
+        <div className="flex gap-2 lg:col-span-6">
+          <button type="submit" disabled={pending !== null} className={primaryButtonClass}>
+            {pending === "save" ? "Saving..." : editing ? "Save account" : "Add account"}
+          </button>
+          {editing && (
+            <button type="button" onClick={() => setEditing(null)} className={ghostButtonClass}>
+              Cancel
+            </button>
+          )}
+        </div>
+      </form>
+
+      {type === "telda" && (
+        <p className="mt-3 text-xs text-muted-foreground">
+          Telda accounts are tracked manually — Mizan does not connect to Telda or sync balances.
+        </p>
+      )}
+
+      <Notice error={error} success={success} />
+
+      <div className="mt-5 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() => setShowArchived(!showArchived)}
+          className={`${ghostButtonClass} ${showArchived ? "bg-muted" : ""}`}
+        >
+          {showArchived ? "Hide archived" : "Show archived"}
+        </button>
+      </div>
+
+      <div className="mt-4 space-y-2">
+        {loading ? (
+          <p className="text-sm text-muted-foreground">Loading your accounts...</p>
+        ) : visible.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            No accounts yet. Add your first bank account, card, wallet or cash above.
+          </p>
+        ) : (
+          visible.map((row) => (
+            <div
+              key={row.id}
+              className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border/70 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium">
+                  {row.name}
+                  {row.last_four && (
+                    <span className="ml-2 text-xs text-muted-foreground">
+                      •••• {row.last_four}
+                    </span>
+                  )}
+                  {!row.is_active && (
+                    <span className="ml-2 text-xs text-muted-foreground">Archived</span>
+                  )}
+                </p>
+                <p className="truncate text-xs text-muted-foreground">
+                  {row.provider} · {accountTypeLabel(row.account_type)} · {row.currency}
+                </p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-semibold">
+                  {amountIn(row.currency, row.initial_balance)}
+                </span>
+                <button type="button" onClick={() => setEditing(row)} className={ghostButtonClass}>
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => toggleArchive(row)}
+                  disabled={pending === `archive-${row.id}`}
+                  className={ghostButtonClass}
+                >
+                  {pending === `archive-${row.id}`
+                    ? "Saving..."
+                    : row.is_active
+                      ? "Archive"
+                      : "Restore"}
+                </button>
+              </div>
+            </div>
+          ))
         )}
       </div>
     </Panel>

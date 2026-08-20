@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_type: string
+          created_at: string
+          currency: string
+          id: string
+          initial_balance: number
+          is_active: boolean
+          last_four: string | null
+          name: string
+          provider: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          account_type?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          initial_balance?: number
+          is_active?: boolean
+          last_four?: string | null
+          name: string
+          provider?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          account_type?: string
+          created_at?: string
+          currency?: string
+          id?: string
+          initial_balance?: number
+          is_active?: boolean
+          last_four?: string | null
+          name?: string
+          provider?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       budgets: {
         Row: {
           amount: number
