@@ -237,7 +237,9 @@ function Dashboard() {
         </div>
 
         <div className="mt-6 grid gap-6">
+          <AccountsPanel userId={user?.id ?? ""} loading={loading} rows={accounts} reload={load} />
           <TransactionsPanel
+
             userId={user?.id ?? ""}
             loading={loading}
             rows={visibleTransactions}
