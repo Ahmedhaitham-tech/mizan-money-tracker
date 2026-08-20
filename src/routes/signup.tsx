@@ -5,7 +5,6 @@ import {
   AuthShell,
   Field,
   SubmitButton,
-  GoogleButton,
 } from "@/components/site";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -50,7 +49,7 @@ function SignUp() {
 
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
-  const [pending, setPending] = useState<"signup" | "google" | null>(null);
+  const [pending, setPending] = useState<"signup" | null>(null);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -150,35 +149,6 @@ function SignUp() {
     }
   }
 
-  async function handleGoogleSignup() {
-    if (pending) return;
-
-    setError("");
-    setSuccess("");
-    setPending("google");
-
-    try {
-      const { error: googleError } =
-        await supabase.auth.signInWithOAuth({
-          provider: "google",
-          options: {
-            redirectTo: absoluteUrl("dashboard"),
-          },
-        });
-
-      if (googleError) {
-        setError(authErrorMessage(googleError));
-        setPending(null);
-        return;
-      }
-
-      // Supabase handles the browser redirect to Google.
-    } catch (unknownError) {
-      setError(authErrorMessage(unknownError));
-      setPending(null);
-    }
-  }
-
   return (
     <AuthShell
       title="Create your account"
@@ -244,15 +214,6 @@ function SignUp() {
             : "Create account"}
         </SubmitButton>
       </form>
-
-      <GoogleButton
-        onClick={handleGoogleSignup}
-        disabled={pending !== null}
-      >
-        {pending === "google"
-          ? "Connecting to Google..."
-          : "Sign up with Google"}
-      </GoogleButton>
 
       <p className="mt-5 text-center text-xs text-muted-foreground">
         Mizan never asks for card numbers, CVV, PINs or banking passwords.
