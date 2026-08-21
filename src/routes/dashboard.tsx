@@ -176,6 +176,7 @@ function Dashboard() {
   const [loadError, setLoadError] = useState("");
   const [fullName, setFullName] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
+  const [hideAmounts, setHideAmounts] = useState(false);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
