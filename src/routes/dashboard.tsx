@@ -243,6 +243,10 @@ function Dashboard() {
     .filter((t) => t.type !== "income")
     .reduce((sum, t) => sum + t.amount, 0);
 
+  const accountBalance = accounts
+    .filter((a) => a.is_active && a.account_type !== "credit_card")
+    .reduce((sum, a) => sum + a.initial_balance, 0);
+
   const visibleTransactions = transactions.filter((t) => {
     if (filter !== "all" && (filter === "income" ? t.type !== "income" : t.type === "income")) {
       return false;
@@ -252,11 +256,16 @@ function Dashboard() {
     return `${t.category ?? ""} ${t.note ?? ""}`.toLowerCase().includes(needle);
   });
 
+  const masked = "••••••";
   const summary = [
-    { label: "Balance", value: money(income - expenses) },
-    { label: "Income", value: money(income) },
-    { label: "Expenses", value: money(expenses) },
-    { label: "Transactions", value: String(transactions.length) },
+    {
+      label: "Balance",
+      value: money(accountBalance + income - expenses),
+      sensitive: true,
+    },
+    { label: "Income", value: money(income), sensitive: true },
+    { label: "Expenses", value: money(expenses), sensitive: true },
+    { label: "Transactions", value: String(transactions.length), sensitive: false },
   ];
 
   return (
@@ -288,11 +297,30 @@ function Dashboard() {
 
         {loadError && <Notice error={loadError} />}
 
-        <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-8 flex items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">Overview</p>
+          <button
+            type="button"
+            onClick={() => setHideAmounts((value) => !value)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-secondary text-secondary-foreground transition-colors hover:bg-muted"
+            aria-label={hideAmounts ? "Show amounts" : "Hide amounts"}
+            aria-pressed={hideAmounts}
+          >
+            {hideAmounts ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          </button>
+        </div>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {summary.map((card) => (
             <div key={card.label} className="panel p-6">
               <p className="text-sm text-muted-foreground">{card.label}</p>
-              <p className="mt-2 text-2xl font-semibold">{loading ? "—" : card.value}</p>
+              <p className="mt-2 text-2xl font-semibold">
+                {loading
+                  ? "—"
+                  : hideAmounts && card.sensitive
+                    ? masked
+                    : card.value}
+              </p>
             </div>
           ))}
         </div>
