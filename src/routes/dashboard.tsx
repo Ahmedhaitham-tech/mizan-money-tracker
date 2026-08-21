@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { RequireAuth } from "@/components/require-auth";
 import { Brand, SiteFooter } from "@/components/site";
