@@ -39,6 +39,7 @@ type Transaction = {
   category: string | null;
   note: string | null;
   occurred_on: string;
+  account_id: string | null;
 };
 
 type Budget = {
@@ -176,7 +177,6 @@ function Dashboard() {
   const [loadError, setLoadError] = useState("");
   const [fullName, setFullName] = useState<string | null>(null);
   const [signingOut, setSigningOut] = useState(false);
-  const [hideAmounts, setHideAmounts] = useState(false);
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [budgets, setBudgets] = useState<Budget[]>([]);
@@ -185,6 +185,7 @@ function Dashboard() {
 
   const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
   const [search, setSearch] = useState("");
+  const [showAmounts, setShowAmounts] = useState(true);
 
   const load = useCallback(async () => {
     if (!user) return;
@@ -193,7 +194,7 @@ function Dashboard() {
     const [tx, bg, gl, ac, profile] = await Promise.all([
       supabase
         .from("transactions")
-        .select("id, type, amount, category, note, occurred_on")
+        .select("id, type, amount, category, note, occurred_on, account_id")
         .order("occurred_on", { ascending: false })
         .order("created_at", { ascending: false }),
       supabase.from("budgets").select("id, name, category, amount, period").order("created_at"),
@@ -243,9 +244,16 @@ function Dashboard() {
     .filter((t) => t.type !== "income")
     .reduce((sum, t) => sum + t.amount, 0);
 
-  const accountBalance = accounts
+  // Credit cards represent debt, not cash the user owns, so they're excluded
+  // from the balance total until credit-card accounting (limits/outstanding
+  // balance) is implemented.
+  const accountsBalance = accounts
     .filter((a) => a.is_active && a.account_type !== "credit_card")
     .reduce((sum, a) => sum + a.initial_balance, 0);
+
+  const totalBalance = accountsBalance + income - expenses;
+
+  const mask = (value: string) => (showAmounts ? value : "••••••");
 
   const visibleTransactions = transactions.filter((t) => {
     if (filter !== "all" && (filter === "income" ? t.type !== "income" : t.type === "income")) {
@@ -256,16 +264,11 @@ function Dashboard() {
     return `${t.category ?? ""} ${t.note ?? ""}`.toLowerCase().includes(needle);
   });
 
-  const masked = "••••••";
   const summary = [
-    {
-      label: "Balance",
-      value: money(accountBalance + income - expenses),
-      sensitive: true,
-    },
-    { label: "Income", value: money(income), sensitive: true },
-    { label: "Expenses", value: money(expenses), sensitive: true },
-    { label: "Transactions", value: String(transactions.length), sensitive: false },
+    { label: "Balance", value: mask(money(totalBalance)) },
+    { label: "Income", value: mask(money(income)) },
+    { label: "Expenses", value: mask(money(expenses)) },
+    { label: "Transactions", value: String(transactions.length) },
   ];
 
   return (
@@ -297,30 +300,30 @@ function Dashboard() {
 
         {loadError && <Notice error={loadError} />}
 
-        <div className="mt-8 flex items-center justify-between gap-3">
-          <p className="text-sm text-muted-foreground">Overview</p>
+        <div className="mt-8 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-muted-foreground">Overview</h2>
           <button
             type="button"
-            onClick={() => setHideAmounts((value) => !value)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-input bg-secondary text-secondary-foreground transition-colors hover:bg-muted"
-            aria-label={hideAmounts ? "Show amounts" : "Hide amounts"}
-            aria-pressed={hideAmounts}
+            onClick={() => setShowAmounts((v) => !v)}
+            className="inline-flex items-center gap-1.5 rounded-lg border border-input bg-secondary px-3 py-1.5 text-xs font-medium text-secondary-foreground transition-colors hover:bg-muted"
           >
-            {hideAmounts ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+            {showAmounts ? (
+              <>
+                <Eye className="size-3.5" /> Hide amounts
+              </>
+            ) : (
+              <>
+                <EyeOff className="size-3.5" /> Show amounts
+              </>
+            )}
           </button>
         </div>
 
-        <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="mt-3 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {summary.map((card) => (
             <div key={card.label} className="panel p-6">
               <p className="text-sm text-muted-foreground">{card.label}</p>
-              <p className="mt-2 text-2xl font-semibold">
-                {loading
-                  ? "—"
-                  : hideAmounts && card.sensitive
-                    ? masked
-                    : card.value}
-              </p>
+              <p className="mt-2 text-2xl font-semibold">{loading ? "—" : card.value}</p>
             </div>
           ))}
         </div>
@@ -336,6 +339,7 @@ function Dashboard() {
             setFilter={setFilter}
             search={search}
             setSearch={setSearch}
+            accounts={accounts}
             reload={load}
           />
           <BudgetsPanel
@@ -378,6 +382,7 @@ function TransactionsPanel({
   setFilter,
   search,
   setSearch,
+  accounts,
   reload,
 }: {
   userId: string;
@@ -387,12 +392,116 @@ function TransactionsPanel({
   setFilter: (value: "all" | "income" | "expense") => void;
   search: string;
   setSearch: (value: string) => void;
+  accounts: Account[];
   reload: () => Promise<void>;
 }) {
   const [editing, setEditing] = useState<Transaction | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [importOpen, setImportOpen] = useState(false);
+  const [importAccountId, setImportAccountId] = useState("");
+  const [importText, setImportText] = useState("");
+  const [importPending, setImportPending] = useState(false);
+  const [importError, setImportError] = useState("");
+
+  type ParsedRow = {
+    occurred_on: string;
+    note: string;
+    amount: number;
+    type: "income" | "expense";
+    lineNumber: number;
+    raw: string;
+  };
+  type FailedRow = { lineNumber: number; raw: string; reason: string };
+
+  function parseImportLine(line: string, lineNumber: number): ParsedRow | FailedRow {
+    const raw = line;
+    const parts = line.split(",");
+    if (parts.length < 3) {
+      return { lineNumber, raw, reason: "Expected: date, description, amount" };
+    }
+
+    const dateRaw = parts[0].trim();
+    const amountRaw = parts[parts.length - 1].trim();
+    const note = parts.slice(1, parts.length - 1).join(",").trim();
+
+    let occurred_on = "";
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateRaw)) {
+      occurred_on = dateRaw;
+    } else {
+      const dmy = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dmy) {
+        const [, d, m, y] = dmy;
+        occurred_on = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
+      }
+    }
+    if (!occurred_on) {
+      return { lineNumber, raw, reason: "Unrecognized date (use YYYY-MM-DD or DD/MM/YYYY)" };
+    }
+
+    const amountNum = Number(amountRaw.replace(/[^0-9.\-]/g, ""));
+    if (!Number.isFinite(amountNum) || amountNum === 0) {
+      return { lineNumber, raw, reason: "Amount is not a valid number" };
+    }
+
+    return {
+      occurred_on,
+      note: note || "Imported transaction",
+      amount: Math.abs(amountNum),
+      type: amountNum < 0 ? "expense" : "income",
+      lineNumber,
+      raw,
+    };
+  }
+
+  const importLines = importText.split("\n").map((l) => l.trim()).filter(Boolean);
+  const importParsed: ParsedRow[] = [];
+  const importFailed: FailedRow[] = [];
+  importLines.forEach((line, index) => {
+    const result = parseImportLine(line, index + 1);
+    if ("reason" in result) importFailed.push(result);
+    else importParsed.push(result);
+  });
+
+  async function handleImportConfirm() {
+    if (importPending) return;
+    setImportError("");
+
+    if (!importAccountId) {
+      setImportError("Choose which account these transactions belong to.");
+      return;
+    }
+    if (importParsed.length === 0) {
+      setImportError("No valid rows to import yet.");
+      return;
+    }
+
+    setImportPending(true);
+    const payload = importParsed.map((row) => ({
+      user_id: userId,
+      account_id: importAccountId,
+      type: row.type,
+      amount: row.amount,
+      category: "Imported",
+      note: row.note,
+      occurred_on: row.occurred_on,
+    }));
+
+    const { error: insertError } = await supabase.from("transactions").insert(payload);
+    setImportPending(false);
+
+    if (insertError) {
+      setImportError(errorMessage(insertError));
+      return;
+    }
+
+    setSuccess(`Imported ${importParsed.length} transaction${importParsed.length === 1 ? "" : "s"}.`);
+    setImportText("");
+    setImportOpen(false);
+    await reload();
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -537,7 +646,103 @@ function TransactionsPanel({
           className={`${inputClass} sm:max-w-xs`}
           aria-label="Search transactions"
         />
+        <button
+          type="button"
+          onClick={() => {
+            setImportOpen((v) => !v);
+            setImportError("");
+          }}
+          className={ghostButtonClass}
+        >
+          {importOpen ? "Close import" : "Import transactions"}
+        </button>
       </div>
+
+      {importOpen && (
+        <div className="mt-4 rounded-lg border border-border/70 bg-secondary/40 p-4">
+          <p className="text-sm font-medium">Paste transactions</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            One per line: date, description, amount — e.g. 2026-08-20, Groceries, -450.
+            Negative = expense, positive = income.
+          </p>
+
+          <select
+            value={importAccountId}
+            onChange={(event) => setImportAccountId(event.target.value)}
+            className={`${inputClass} mt-3`}
+            aria-label="Account to import into"
+          >
+            <option value="">Select an account...</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>
+                {account.name}
+              </option>
+            ))}
+          </select>
+
+          <textarea
+            value={importText}
+            onChange={(event) => setImportText(event.target.value)}
+            rows={6}
+            placeholder={"2026-08-20, Groceries, -450\n2026-08-19, Salary, 8000"}
+            className={`${inputClass} mt-3 w-full font-mono text-xs`}
+            aria-label="Transactions to import"
+          />
+
+          {importLines.length > 0 && (
+            <div className="mt-3 max-h-56 overflow-y-auto rounded-md border border-border/60">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/60 text-left text-muted-foreground">
+                  <tr>
+                    <th className="px-2 py-1.5">Date</th>
+                    <th className="px-2 py-1.5">Description</th>
+                    <th className="px-2 py-1.5">Amount</th>
+                    <th className="px-2 py-1.5">Type</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {importParsed.map((row) => (
+                    <tr key={row.lineNumber} className="border-t border-border/40">
+                      <td className="px-2 py-1.5">{row.occurred_on}</td>
+                      <td className="px-2 py-1.5">{row.note}</td>
+                      <td className="px-2 py-1.5">{money(row.amount)}</td>
+                      <td className="px-2 py-1.5 capitalize">{row.type}</td>
+                    </tr>
+                  ))}
+                  {importFailed.map((row) => (
+                    <tr key={`fail-${row.lineNumber}`} className="border-t border-border/40 text-destructive">
+                      <td className="px-2 py-1.5" colSpan={3}>
+                        Line {row.lineNumber}: {row.raw}
+                      </td>
+                      <td className="px-2 py-1.5">{row.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {importLines.length > 0 && (
+            <p className="mt-2 text-xs text-muted-foreground">
+              {importParsed.length} valid row{importParsed.length === 1 ? "" : "s"}
+              {importFailed.length > 0 && `, ${importFailed.length} could not be read`}
+            </p>
+          )}
+
+          <Notice error={importError} />
+
+          <button
+            type="button"
+            onClick={handleImportConfirm}
+            disabled={importPending || importParsed.length === 0}
+            className={`${primaryButtonClass} mt-3`}
+          >
+            {importPending
+              ? "Importing..."
+              : `Import ${importParsed.length || ""} transaction${importParsed.length === 1 ? "" : "s"}`}
+          </button>
+        </div>
+      )}
 
       <div className="mt-4 space-y-2">
         {loading ? (
