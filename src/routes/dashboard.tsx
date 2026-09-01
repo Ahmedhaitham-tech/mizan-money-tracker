@@ -111,7 +111,7 @@ function amountIn(currency: string, value: number) {
 function money(value: number) {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
-    currency: "USD",
+    currency: "EGP",
     maximumFractionDigits: 2,
   }).format(value);
 }
