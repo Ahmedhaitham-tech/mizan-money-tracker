@@ -12,6 +12,7 @@ import {
   EMAIL_PATTERN,
   absoluteUrl,
   authErrorMessage,
+  withNetworkRetry,
 } from "@/lib/auth-utils";
 
 export const Route = createFileRoute("/signup")({
@@ -105,8 +106,8 @@ function SignUp() {
     setPending("signup");
 
     try {
-      const { data, error: signUpError } =
-        await supabase.auth.signUp({
+      const { data, error: signUpError } = await withNetworkRetry(() =>
+        supabase.auth.signUp({
           email,
           password,
           options: {
@@ -115,7 +116,8 @@ function SignUp() {
               full_name: name,
             },
           },
-        });
+        }),
+      );
 
       // Supabase returned an authentication error.
       if (signUpError) {
