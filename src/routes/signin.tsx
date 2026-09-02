@@ -3,7 +3,7 @@ import { useState } from "react";
 
 import { AuthShell, Field, SubmitButton, GoogleButton } from "@/components/site";
 import { supabase } from "@/integrations/supabase/client";
-import { EMAIL_PATTERN, absoluteUrl, authErrorMessage } from "@/lib/auth-utils";
+import { EMAIL_PATTERN, absoluteUrl, authErrorMessage, withNetworkRetry } from "@/lib/auth-utils";
 
 export const Route = createFileRoute("/signin")({
   head: () => ({
@@ -56,10 +56,12 @@ function SignIn() {
     setPending("password");
 
     try {
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password,
-      });
+      const { data, error: signInError } = await withNetworkRetry(() =>
+        supabase.auth.signInWithPassword({
+          email,
+          password,
+        }),
+      );
 
       if (signInError) {
         setError(authErrorMessage(signInError));
