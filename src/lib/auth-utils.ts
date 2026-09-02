@@ -81,3 +81,30 @@ export function authErrorMessage(error: unknown): string {
 }
 
 export const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
+
+/**
+ * Retries an auth call a few times if it fails at the network layer (e.g. a
+ * flaky DNS lookup causing "Failed to fetch"), before giving up. Does NOT
+ * retry real auth rejections (wrong password, etc.) — those come back as a
+ * normal { error } result from Supabase, not a thrown exception, so they
+ * never enter this catch block at all.
+ */
+export async function withNetworkRetry<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  delayMs = 700,
+): Promise<T> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      return await fn();
+    } catch (error) {
+      lastError = error;
+      const message = (error instanceof Error ? error.message : String(error)).toLowerCase();
+      const isNetworkFailure = message.includes("failed to fetch") || message.includes("network");
+      if (!isNetworkFailure || attempt === attempts - 1) throw error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs * (attempt + 1)));
+    }
+  }
+  throw lastError;
+}
