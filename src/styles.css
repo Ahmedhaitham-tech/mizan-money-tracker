@@ -121,3 +121,34 @@
   border-radius: var(--radius-2xl);
   box-shadow: var(--shadow-elevated);
 }
+
+@keyframes auth-pendant-glow {
+  0%,
+  100% {
+    opacity: 0.55;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes auth-pendant-sway {
+  0%,
+  100% {
+    transform: rotate(-2deg);
+  }
+  50% {
+    transform: rotate(2deg);
+  }
+}
+
+.auth-pendant-cord {
+  transform-origin: top center;
+  animation: auth-pendant-sway 4.5s ease-in-out infinite;
+}
+
+.auth-pendant-bulb {
+  animation: auth-pendant-glow 2.6s ease-in-out infinite;
+}
