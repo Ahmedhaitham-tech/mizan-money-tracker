@@ -423,8 +423,8 @@ function TransactionsPanel({
       return { lineNumber, raw, reason: "Expected: date, description, amount" };
     }
 
-    const dateRaw = parts[0].trim();
-    const amountRaw = parts[parts.length - 1].trim();
+    const dateRaw = (parts[0] ?? "").trim();
+    const amountRaw = (parts[parts.length - 1] ?? "").trim();
     const note = parts.slice(1, parts.length - 1).join(",").trim();
 
     let occurred_on = "";
@@ -433,7 +433,7 @@ function TransactionsPanel({
     } else {
       const dmy = dateRaw.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (dmy) {
-        const [, d, m, y] = dmy;
+        const [, d = "", m = "", y = ""] = dmy;
         occurred_on = `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
       }
     }
