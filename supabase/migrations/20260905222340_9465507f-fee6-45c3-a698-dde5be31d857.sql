@@ -1,0 +1,2 @@
+ALTER TABLE public.transactions ADD COLUMN IF NOT EXISTS account_id uuid REFERENCES public.accounts(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS transactions_account_id_idx ON public.transactions(account_id);
