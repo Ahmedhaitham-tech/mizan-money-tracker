@@ -47,6 +47,29 @@ export function SiteFooter() {
   );
 }
 
+export function AuthPendant() {
+  return (
+    <div className="mb-6 flex justify-center" aria-hidden="true">
+      <svg width="120" height="130" viewBox="0 0 120 130" fill="none">
+        <line
+          className="auth-pendant-cord"
+          x1="60"
+          y1="0"
+          x2="60"
+          y2="46"
+          stroke="var(--color-border)"
+          strokeWidth="2"
+        />
+        <g className="auth-pendant-cord">
+          <circle className="auth-pendant-bulb" cx="60" cy="70" r="26" fill="var(--color-primary)" opacity="0.16" />
+          <circle className="auth-pendant-bulb" cx="60" cy="70" r="16" fill="var(--color-primary)" opacity="0.35" />
+          <circle cx="60" cy="70" r="9" fill="var(--color-primary)" />
+        </g>
+      </svg>
+    </div>
+  );
+}
+
 export function AuthShell({
   title,
   subtitle,
@@ -64,11 +87,14 @@ export function AuthShell({
         <Brand />
       </div>
       <main className="flex flex-1 items-center justify-center px-5 py-10">
-        <div className="panel w-full max-w-md p-7">
-          <h1 className="text-2xl font-semibold">{title}</h1>
-          <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
-          <div className="mt-6">{children}</div>
-          <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>
+        <div className="w-full max-w-md">
+          <AuthPendant />
+          <div className="panel p-7">
+            <h1 className="text-2xl font-semibold">{title}</h1>
+            <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+            <div className="mt-6">{children}</div>
+            <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>
+          </div>
         </div>
       </main>
     </div>
