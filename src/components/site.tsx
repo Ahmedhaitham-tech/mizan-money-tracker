@@ -89,7 +89,7 @@ export function AuthShell({
       <main className="flex flex-1 items-center justify-center px-5 py-10">
         <div className="w-full max-w-md">
           <AuthPendant />
-          <div className="panel p-7">
+          <div className="panel auth-card-enter p-7">
             <h1 className="text-2xl font-semibold">{title}</h1>
             <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
             <div className="mt-6">{children}</div>
