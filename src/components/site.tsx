@@ -82,24 +82,28 @@ export function AuthShell({
   footer: ReactNode;
 }) {
   return (
-    <div className="hero-surface flex min-h-screen flex-col">
+    <div className="hero-surface scene-root flex min-h-screen flex-col overflow-x-hidden">
       <div className="mx-auto flex h-16 w-full max-w-6xl items-center px-5">
         <Brand />
       </div>
-      <main className="flex flex-1 items-center justify-center px-5 py-10">
-        <div className="w-full max-w-md">
-          <AuthPendant />
-          <div className="panel auth-card-enter p-7">
-            <h1 className="text-2xl font-semibold">{title}</h1>
-            <p className="mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
-            <div className="mt-6">{children}</div>
-            <div className="mt-6 text-center text-sm text-muted-foreground">{footer}</div>
+      <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col items-center gap-8 px-5 py-8 lg:flex-row lg:items-center lg:justify-between lg:gap-12 lg:py-12">
+        <AuthScene />
+        <div className="w-full max-w-md lg:shrink-0">
+          <div className="glass-panel panel-enter p-7">
+            <span className="glass-sweep" aria-hidden="true" />
+            <h1 className="reveal reveal-1 text-2xl font-semibold">{title}</h1>
+            <p className="reveal reveal-2 mt-1.5 text-sm text-muted-foreground">{subtitle}</p>
+            <div className="reveal reveal-3 mt-6">{children}</div>
+            <div className="reveal reveal-4 mt-6 text-center text-sm text-muted-foreground">
+              {footer}
+            </div>
           </div>
         </div>
       </main>
     </div>
   );
 }
+
 
 export function Field({
   label,
