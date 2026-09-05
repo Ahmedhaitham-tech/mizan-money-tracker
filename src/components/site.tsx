@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { AuthScene } from "@/components/auth-scene";
+
 export function Brand() {
   return (
     <Link to="/" className="flex items-center gap-2.5">
@@ -132,7 +134,7 @@ export function Field({
         type={type}
         required
         autoComplete={autoComplete}
-        className="h-11 w-full rounded-lg border border-input bg-background/60 px-3.5 text-sm outline-none transition-shadow placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+        className="glass-input h-11 w-full rounded-lg border border-input bg-background/60 px-3.5 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
       />
     </div>
   );
@@ -149,7 +151,7 @@ export function SubmitButton({
     <button
       type="submit"
       disabled={disabled}
-      className="h-11 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+      className="glow-button h-11 w-full rounded-lg bg-primary text-sm font-semibold text-primary-foreground disabled:cursor-not-allowed disabled:opacity-60"
     >
       {children}
     </button>
