@@ -423,11 +423,17 @@ function TransactionsPanel({
     try {
       // Loaded from a CDN at runtime (not an npm dependency) so this never
       // risks a package.json/lock-file mismatch breaking the production build.
-      const Tesseract = await import(
+      const { createWorker } = await import(
         /* @vite-ignore */ "https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.esm.min.js"
       );
-      const { data } = await Tesseract.recognize(file, "eng+ara");
-      const text: string = data?.text ?? "";
+      const worker = await createWorker(["eng", "ara"]);
+      let text = "";
+      try {
+        const { data } = await worker.recognize(file);
+        text = data?.text ?? "";
+      } finally {
+        await worker.terminate();
+      }
       setScanRawText(text);
 
       const lines = text
