@@ -414,13 +414,47 @@ function TransactionsPanel({
   const [scanNote, setScanNote] = useState("");
   const [scanAmount, setScanAmount] = useState("");
   const [scanRawText, setScanRawText] = useState("");
+  const [scanConfidence, setScanConfidence] = useState<number | null>(null);
+  const [scanAmountFound, setScanAmountFound] = useState(false);
+
+  /** Grayscale + contrast boost — this alone noticeably improves OCR
+   * accuracy on real photos (uneven lighting, slightly blurry text) compared
+   * to feeding the raw camera image straight to the OCR engine. */
+  async function preprocessReceiptImage(file: File): Promise<Blob> {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+
+    ctx.drawImage(bitmap, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const px = imageData.data;
+    const contrast = 1.35;
+    for (let i = 0; i < px.length; i += 4) {
+      const gray = px[i] * 0.299 + px[i + 1] * 0.587 + px[i + 2] * 0.114;
+      const adjusted = (gray - 128) * contrast + 128;
+      const clamped = Math.max(0, Math.min(255, adjusted));
+      px[i] = px[i + 1] = px[i + 2] = clamped;
+    }
+    ctx.putImageData(imageData, 0, 0);
+
+    return new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob ?? file), "image/png");
+    });
+  }
 
   async function handleReceiptFile(file: File) {
     setScanError("");
     setScanStatus("reading");
     setScanRawText("");
+    setScanConfidence(null);
+    setScanAmountFound(false);
 
     try {
+      const cleanedImage = await preprocessReceiptImage(file);
+
       // Loaded from a CDN at runtime (not an npm dependency) so this never
       // risks a package.json/lock-file mismatch breaking the production build.
       const { createWorker } = await import(
@@ -428,13 +462,16 @@ function TransactionsPanel({
       );
       const worker = await createWorker(["eng", "ara"]);
       let text = "";
+      let confidence = 0;
       try {
-        const { data } = await worker.recognize(file);
+        const { data } = await worker.recognize(cleanedImage);
         text = data?.text ?? "";
+        confidence = data?.confidence ?? 0;
       } finally {
         await worker.terminate();
       }
       setScanRawText(text);
+      setScanConfidence(Math.round(confidence));
 
       const lines = text
         .split("\n")
@@ -455,12 +492,19 @@ function TransactionsPanel({
         }
       }
 
-      const totalLine = lines.find((l) => /total|الإجمالي|الاجمالي|المجموع/i.test(l));
+      // Prefer a line that says "Total" but NOT "Subtotal" — receipts often
+      // list both, and the grand total is what we actually want.
       const numberPattern = /\d{1,3}(?:[,.]\d{3})*(?:\.\d{1,2})?/g;
+      const totalLine = lines.find((l) => /\btotal\b/i.test(l) && !/sub[\s-]?total/i.test(l));
+      const anyTotalLine = totalLine ?? lines.find((l) => /total|الإجمالي|الاجمالي|المجموع/i.test(l));
       let guessedAmount = "";
-      if (totalLine) {
-        const matches = totalLine.match(numberPattern);
-        if (matches?.length) guessedAmount = matches[matches.length - 1].replace(/,/g, "");
+      let foundOnReceipt = false;
+      if (anyTotalLine) {
+        const matches = anyTotalLine.match(numberPattern);
+        if (matches?.length) {
+          guessedAmount = matches[matches.length - 1].replace(/,/g, "");
+          foundOnReceipt = true;
+        }
       }
       if (!guessedAmount) {
         const allNumbers = (text.match(numberPattern) ?? []).map((n) =>
@@ -472,6 +516,7 @@ function TransactionsPanel({
       setScanDate(guessedDate);
       setScanNote(guessedNote);
       setScanAmount(guessedAmount);
+      setScanAmountFound(foundOnReceipt);
       setScanStatus("review");
     } catch (err) {
       setScanError(
@@ -803,6 +848,26 @@ function TransactionsPanel({
 
           {(scanStatus === "review" || scanStatus === "saving") && (
             <div className="mt-3 space-y-3">
+              {scanConfidence !== null && (
+                <p
+                  className={`text-xs ${
+                    scanConfidence >= 70
+                      ? "text-primary"
+                      : scanConfidence >= 40
+                        ? "text-yellow-500"
+                        : "text-destructive"
+                  }`}
+                >
+                  {scanConfidence >= 70
+                    ? `Read with ${scanConfidence}% confidence — looks reliable, but still worth a glance.`
+                    : scanConfidence >= 40
+                      ? `Only ${scanConfidence}% confidence — please double-check every field below.`
+                      : `Low confidence (${scanConfidence}%) — this photo was hard to read. Check carefully or retake it.`}
+                  {!scanAmountFound &&
+                    " The amount below is a best guess, not a line clearly labeled \u2018Total\u2019 — please verify it."}
+                </p>
+              )}
+
               <select
                 value={scanAccountId}
                 onChange={(event) => setScanAccountId(event.target.value)}
@@ -828,7 +893,9 @@ function TransactionsPanel({
                   />
                 </div>
                 <div className="space-y-1.5">
-                  <label className="text-xs font-medium text-muted-foreground">Amount (EGP)</label>
+                  <label className="text-xs font-medium text-muted-foreground">
+                    Amount (EGP) {!scanAmountFound && "\u2014 unverified guess"}
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -848,6 +915,17 @@ function TransactionsPanel({
                   placeholder="Merchant or what it was for"
                 />
               </div>
+
+              {scanRawText && (
+                <details className="rounded-md border border-border/50 bg-background/40 p-2 text-xs">
+                  <summary className="cursor-pointer text-muted-foreground">
+                    See exactly what was read from the photo
+                  </summary>
+                  <pre className="mt-2 max-h-40 overflow-y-auto whitespace-pre-wrap text-muted-foreground">
+                    {scanRawText}
+                  </pre>
+                </details>
+              )}
 
               <Notice error={scanError} />
 
