@@ -108,6 +108,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       // BASE_URL keeps the icon resolvable when the app is served from a
       // sub-path (e.g. GitHub Pages project sites).
       { rel: "icon", href: `${import.meta.env.BASE_URL}favicon.ico`, type: "image/x-icon" },
+      { rel: "manifest", href: `${import.meta.env.BASE_URL}manifest.webmanifest` },
+      { rel: "apple-touch-icon", href: `${import.meta.env.BASE_URL}icons/icon-192.png` },
 
     ],
   }),
@@ -134,6 +136,15 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    if ("serviceWorker" in navigator) {
+      const swUrl = `${import.meta.env.BASE_URL}sw.js`;
+      navigator.serviceWorker.register(swUrl, { scope: import.meta.env.BASE_URL }).catch(() => {
+        // Installability is a nice-to-have; never block the app if this fails.
+      });
+    }
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>
