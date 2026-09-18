@@ -1,5 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { Eye, EyeOff } from "lucide-react";
 
 import { RequireAuth } from "@/components/require-auth";
@@ -125,6 +125,44 @@ function errorMessage(error: unknown) {
     return String((error as { message: unknown }).message);
   }
   return "Something went wrong. Please try again.";
+}
+
+const MONEY_TIPS = [
+  "Small, tracked expenses beat big, forgotten ones. Every entry here adds up to a clearer picture.",
+  "A budget isn't a cage \u2014 it's a plan that lets you spend on what actually matters to you.",
+  "Saving 10% of what you earn, consistently, beats saving 50% occasionally.",
+  "The best time to start tracking your money was a year ago. The second best time is today.",
+  "Every receipt you scan today is a favor to the version of you trying to remember where the money went.",
+  "Debt-free isn't about earning more \u2014 it's usually about knowing where less is going.",
+  "A goal with a number and a date is a plan. A goal without them is just a wish.",
+  "You don't need a bigger income to feel in control of money \u2014 you need a clearer view of it.",
+  "Review your spending weekly, not just at the end of the month \u2014 small course-corrections are easier than big ones.",
+  "Cash you can see disappearing (like a wallet) is easier to manage than cash you can't (like a card). Track both the same way.",
+  "The goal isn't to never spend on things you enjoy \u2014 it's to spend on them on purpose.",
+  "An emergency fund isn't pessimism, it's what lets you handle a bad week without a bad year.",
+  "Paying yourself first \u2014 saving before spending \u2014 works better than saving whatever's left over.",
+  "Every account you track here is one less thing you have to hold in your head.",
+  "Consistency in small habits (like logging a transaction right after it happens) beats motivation that fades by Friday.",
+  "A financial goal feels far away until you can see the progress bar moving.",
+];
+
+function moneyTipOfTheDay() {
+  const dayOfYear = Math.floor(
+    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000,
+  );
+  return MONEY_TIPS[dayOfYear % MONEY_TIPS.length];
+}
+
+function MoneyTipCard() {
+  const tip = useMemo(() => moneyTipOfTheDay(), []);
+  return (
+    <div className="panel mt-4 flex items-start gap-3 p-4">
+      <span className="mt-0.5 text-lg" aria-hidden="true">
+        💡
+      </span>
+      <p className="text-sm text-muted-foreground">{tip}</p>
+    </div>
+  );
 }
 
 const inputClass =
@@ -297,6 +335,8 @@ function Dashboard() {
         <p className="mt-1.5 text-sm text-muted-foreground">
           Signed in as {user?.email}. Everything here is private to your account.
         </p>
+
+        <MoneyTipCard />
 
         {loadError && <Notice error={loadError} />}
 
