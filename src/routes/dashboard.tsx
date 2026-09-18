@@ -146,15 +146,12 @@ const MONEY_TIPS = [
   "A financial goal feels far away until you can see the progress bar moving.",
 ];
 
-function moneyTipOfTheDay() {
-  const dayOfYear = Math.floor(
-    (Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / 86_400_000,
-  );
-  return MONEY_TIPS[dayOfYear % MONEY_TIPS.length];
+function randomMoneyTip() {
+  return MONEY_TIPS[Math.floor(Math.random() * MONEY_TIPS.length)];
 }
 
 function MoneyTipCard() {
-  const tip = useMemo(() => moneyTipOfTheDay(), []);
+  const tip = useMemo(() => randomMoneyTip(), []);
   return (
     <div className="panel mt-4 flex items-start gap-3 p-4">
       <span className="mt-0.5 text-lg" aria-hidden="true">
