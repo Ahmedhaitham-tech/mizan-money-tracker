@@ -413,6 +413,12 @@ function Dashboard() {
 
 // Shown after logging an INCOME transaction — encouraging, about the reward
 // of effort. Deliberately never shame-based.
+/** True when the given text is primarily Arabic script, so a message can
+ * switch to right-to-left layout for correct alignment and punctuation. */
+function isArabicText(text: string) {
+  return /[\u0600-\u06FF]/.test(text);
+}
+
 const ARABIC_INCOME_QUOTES = [
   "من جدّ وجد، ومن زرع حصد \u2014 وده أول حصاده.",
   "رزقك جالك بسعيك، فاستقبله بالشكر واستثمره بالحكمة.",
