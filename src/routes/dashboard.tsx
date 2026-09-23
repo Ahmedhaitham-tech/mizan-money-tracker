@@ -144,19 +144,7 @@ const MONEY_TIPS = [
   "Every account you track here is one less thing you have to hold in your head.",
   "Consistency in small habits (like logging a transaction right after it happens) beats motivation that fades by Friday.",
   "A financial goal feels far away until you can see the progress bar moving.",
-  // Authentic Arabic proverbs and sayings about saving and money management.
-  "القرش الأبيض ينفع في اليوم الأسود \u2014 اللي بتوفره النهارده هو اللي هيطمنك بكرة.",
-  "إن كنت على البير اصرف بتدبير \u2014 حتى لو معاك فلوس كتير، خليك حكيم في صرفها.",
-  "التوفير مش حرمان نفسك من اللي بتحبه، ده إنك تختار بوعي إيه اللي يستاهل فلوسك فعلاً.",
-  "كل قرش بتسجله هنا خطوة صغيرة نحو راحة بالك بكرة.",
-  "الاستمرارية في تسجيل مصاريفك، حتى لو بسيطة، أقوى من أي قرار كبير بتاخده مرة واحدة.",
 ];
-
-/** True when the given text is primarily Arabic script, so the tip card can
- * switch to right-to-left layout for correct alignment and punctuation. */
-function isArabicText(text: string) {
-  return /[\u0600-\u06FF]/.test(text);
-}
 
 function randomMoneyTip() {
   return MONEY_TIPS[Math.floor(Math.random() * MONEY_TIPS.length)];
@@ -164,12 +152,8 @@ function randomMoneyTip() {
 
 function MoneyTipCard() {
   const tip = useMemo(() => randomMoneyTip(), []);
-  const rtl = isArabicText(tip);
   return (
-    <div
-      className={`panel mt-4 flex items-start gap-3 p-4 ${rtl ? "flex-row-reverse text-right" : ""}`}
-      dir={rtl ? "rtl" : "ltr"}
-    >
+    <div className="panel mt-4 flex items-start gap-3 p-4">
       <span className="mt-0.5 text-lg" aria-hidden="true">
         💡
       </span>
@@ -427,6 +411,28 @@ function Dashboard() {
 
 /* ---------------------------------- transactions --------------------------------- */
 
+// Shown after logging an INCOME transaction — encouraging, about the reward
+// of effort. Deliberately never shame-based.
+const ARABIC_INCOME_QUOTES = [
+  "من جدّ وجد، ومن زرع حصد \u2014 وده أول حصاده.",
+  "رزقك جالك بسعيك، فاستقبله بالشكر واستثمره بالحكمة.",
+  "كل جنيه بتكسبه هو ثمرة تعبك \u2014 خليه يستاهل التعب ده.",
+  "العمل اليوم بذرة، والرزق اللي بتشوفه دلوقتي أول حصادها.",
+];
+
+// Shown after logging an EXPENSE transaction — mindful and constructive,
+// never guilt-inducing. Spending is normal; this is just a gentle nudge.
+const ARABIC_EXPENSE_QUOTES = [
+  "إن كنت على البير اصرف بتدبير \u2014 حتى لو معاك فلوس كتير، خليك حكيم في صرفها.",
+  "القرش الأبيض ينفع في اليوم الأسود \u2014 خد بالك تحتفظ بجزء منه كمان.",
+  "الصرف الواعي مش حرمان، ده احترام لتعبك في الكسب.",
+  "قبل ما تصرف: ده احتياج ولا نزوة؟ الاتنين ممكن يكونوا صح، بس المهم تعرف الفرق.",
+];
+
+function randomFrom<T>(list: T[]): T {
+  return list[Math.floor(Math.random() * list.length)];
+}
+
 function TransactionsPanel({
   userId,
   loading,
@@ -452,6 +458,7 @@ function TransactionsPanel({
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [txnQuote, setTxnQuote] = useState("");
 
   const [importOpen, setImportOpen] = useState(false);
   const [importAccountId, setImportAccountId] = useState("");
@@ -730,6 +737,7 @@ function TransactionsPanel({
 
     setError("");
     setSuccess("");
+    setTxnQuote("");
 
     if (!Number.isFinite(amount) || amount <= 0) {
       setError("Enter an amount greater than zero.");
@@ -755,6 +763,9 @@ function TransactionsPanel({
     }
 
     setSuccess(editing ? "Transaction updated." : "Transaction added.");
+    if (!editing) {
+      setTxnQuote(type === "income" ? randomFrom(ARABIC_INCOME_QUOTES) : randomFrom(ARABIC_EXPENSE_QUOTES));
+    }
     setEditing(null);
     form.reset();
     await reload();
@@ -764,6 +775,7 @@ function TransactionsPanel({
     if (pending) return;
     setError("");
     setSuccess("");
+    setTxnQuote("");
     setPending(`delete-${id}`);
     const { error: deleteError } = await supabase.from("transactions").delete().eq("id", id);
     setPending(null);
@@ -840,6 +852,16 @@ function TransactionsPanel({
       </form>
 
       <Notice error={error} success={success} />
+      {txnQuote && (
+        <p
+          dir={isArabicText(txnQuote) ? "rtl" : "ltr"}
+          className={`mt-2 rounded-lg border border-border/60 bg-secondary/30 px-3 py-2 text-sm text-muted-foreground ${
+            isArabicText(txnQuote) ? "text-right" : ""
+          }`}
+        >
+          {txnQuote}
+        </p>
+      )}
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         {(["all", "income", "expense"] as const).map((option) => (
