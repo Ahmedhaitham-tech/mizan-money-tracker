@@ -466,6 +466,71 @@ function TransactionsPanel({
   const [success, setSuccess] = useState("");
   const [txnQuote, setTxnQuote] = useState("");
 
+  const [formType, setFormType] = useState<"income" | "expense">("expense");
+  const [formAmount, setFormAmount] = useState("");
+  const [formCategory, setFormCategory] = useState("");
+  const [formNote, setFormNote] = useState("");
+  const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "unsupported">("idle");
+  const [voiceError, setVoiceError] = useState("");
+
+  // Keep the (now-controlled) form fields in sync whenever the user starts
+  // editing a different transaction, or cancels back out of editing.
+  useEffect(() => {
+    setFormType(editing?.type === "income" ? "income" : "expense");
+    setFormAmount(editing ? String(editing.amount) : "");
+    setFormCategory(editing?.category ?? "");
+    setFormNote(editing?.note ?? "");
+  }, [editing]);
+
+  function startVoiceCapture() {
+    const SpeechRecognitionImpl =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionImpl) {
+      setVoiceStatus("unsupported");
+      setVoiceError("Voice input isn't supported in this browser \u2014 try Chrome on Android.");
+      return;
+    }
+
+    setVoiceError("");
+    setVoiceStatus("listening");
+
+    const recognition = new SpeechRecognitionImpl();
+    recognition.lang = navigator.language || "en-US";
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onresult = (event: any) => {
+      const transcript: string = event.results?.[0]?.[0]?.transcript ?? "";
+
+      // Pull the first number out as the amount (speech-to-text engines
+      // reliably transcribe spoken numbers as digits in both EN and AR).
+      const numberMatch = transcript.match(/\d+(?:[.,]\d+)?/);
+      if (numberMatch) {
+        setFormAmount(numberMatch[0].replace(",", "."));
+      }
+
+      // Whatever's left, once filler words are stripped, becomes the note
+      // \u2014 the user still reviews and can edit it before saving.
+      const cleaned = transcript
+        .replace(numberMatch?.[0] ?? "", "")
+        .replace(/\b(pounds?|egp|le|جنيه|جنيها|للجنيه|riyal|dollars?)\b/gi, "")
+        .replace(/\s{2,}/g, " ")
+        .trim();
+      if (cleaned) setFormNote(cleaned);
+    };
+
+    recognition.onerror = () => {
+      setVoiceStatus("idle");
+      setVoiceError("Didn't catch that \u2014 please try again or type it in manually.");
+    };
+
+    recognition.onend = () => {
+      setVoiceStatus("idle");
+    };
+
+    recognition.start();
+  }
+
   const [importOpen, setImportOpen] = useState(false);
   const [importAccountId, setImportAccountId] = useState("");
   const [importText, setImportText] = useState("");
@@ -735,10 +800,10 @@ function TransactionsPanel({
     const form = event.currentTarget;
     const data = new FormData(form);
 
-    const amount = Number(data.get("amount"));
-    const type = String(data.get("type") || "expense");
-    const category = String(data.get("category") || "").trim();
-    const note = String(data.get("note") || "").trim();
+    const amount = Number(formAmount);
+    const type = formType;
+    const category = formCategory.trim();
+    const note = formNote.trim();
     const occurred_on = String(data.get("occurred_on") || today());
 
     setError("");
@@ -773,6 +838,10 @@ function TransactionsPanel({
       setTxnQuote(type === "income" ? randomFrom(ARABIC_INCOME_QUOTES) : randomFrom(ARABIC_EXPENSE_QUOTES));
     }
     setEditing(null);
+    setFormType("expense");
+    setFormAmount("");
+    setFormCategory("");
+    setFormNote("");
     form.reset();
     await reload();
   }
@@ -800,40 +869,66 @@ function TransactionsPanel({
       description="Record income and expenses. Everything is saved to your account."
     >
       <form className="grid gap-3 sm:grid-cols-2 lg:grid-cols-6" onSubmit={handleSubmit}>
-        <select
-          key={`type-${editing?.id ?? "new"}`}
-          name="type"
-          defaultValue={editing?.type ?? "expense"}
-          className={inputClass}
-          aria-label="Transaction type"
-        >
-          <option value="expense">Expense</option>
-          <option value="income">Income</option>
-        </select>
+        <div className="flex gap-1.5 rounded-lg border border-border bg-background/40 p-1">
+          <button
+            type="button"
+            onClick={() => setFormType("expense")}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              formType === "expense"
+                ? "bg-destructive/20 text-destructive"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Expense
+          </button>
+          <button
+            type="button"
+            onClick={() => setFormType("income")}
+            className={`flex-1 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+              formType === "income"
+                ? "bg-primary/20 text-primary"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            Income
+          </button>
+        </div>
+        <div className="flex gap-2">
+          <input
+            name="amount"
+            type="number"
+            step="0.01"
+            min="0"
+            placeholder="Amount"
+            value={formAmount}
+            onChange={(event) => setFormAmount(event.target.value)}
+            className={`${inputClass} flex-1`}
+            aria-label="Amount"
+          />
+          <button
+            type="button"
+            onClick={startVoiceCapture}
+            disabled={voiceStatus === "listening"}
+            title="Say what you paid and what for"
+            aria-label="Add by voice"
+            className={`${ghostButtonClass} px-3`}
+          >
+            {voiceStatus === "listening" ? "🎙️" : "🎤"}
+          </button>
+        </div>
         <input
-          key={`amount-${editing?.id ?? "new"}`}
-          name="amount"
-          type="number"
-          step="0.01"
-          min="0"
-          placeholder="Amount"
-          defaultValue={editing?.amount ?? ""}
-          className={inputClass}
-          aria-label="Amount"
-        />
-        <input
-          key={`category-${editing?.id ?? "new"}`}
           name="category"
           placeholder="Category"
-          defaultValue={editing?.category ?? ""}
+          value={formCategory}
+          onChange={(event) => setFormCategory(event.target.value)}
           className={inputClass}
           aria-label="Category"
         />
         <input
-          key={`note-${editing?.id ?? "new"}`}
           name="note"
           placeholder="Note (optional)"
-          defaultValue={editing?.note ?? ""}
+          value={formNote}
+          onChange={(event) => setFormNote(event.target.value)}
           className={inputClass}
           aria-label="Note"
         />
@@ -856,6 +951,12 @@ function TransactionsPanel({
           )}
         </div>
       </form>
+
+      {voiceStatus === "listening" && (
+        <p className="mt-2 text-sm text-muted-foreground">Listening \u2014 say the amount and what it was for...</p>
+      )}
+      {voiceError && <Notice error={voiceError} />}
+
 
       <Notice error={error} success={success} />
       {txnQuote && (
